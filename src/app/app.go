@@ -1,53 +1,50 @@
-package main
+package app
 
 import (
-	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
-	"os"
 	"strconv"
 
 	"github.com/gorilla/mux"
-	"github.com/npflan/steam-gameserver-token-api/steam"
+	"github.com/gsh-lan/steam-gameserver-token-api/src/logger"
+	"github.com/gsh-lan/steam-gameserver-token-api/src/steam"
+	jsoniter "github.com/json-iterator/go"
+	"go.uber.org/zap"
 )
+
+const headerAuthorization = "authorization"
+
+var log *zap.SugaredLogger
+
+func init() {
+	log = logger.GetSugaredLogger()
+}
 
 // App contains references to global necessities
 type App struct {
-	Router *mux.Router
-	Log    Log
+	Router    *mux.Router
+	authToken string
+	steam     *steam.Steam
 }
-
-// Log is a modifiable endpoint
-type Log struct {
-	Error *log.Logger
-	Info  *log.Logger
-}
-
-const defaultLogFormat = log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile | log.LUTC
 
 // Run server on specific interface
-func (a *App) Run(addr string) {
+func (a *App) Run(addr, apiKey, authToken string) {
+	a.authToken = authToken
+	a.steam = steam.New(apiKey)
+
 	a.registerRoutes()
-	// set default log format if no custom format present
-	if a.Log.Info == nil {
-		log.New(os.Stdout, "INFO: ", defaultLogFormat)
-	}
-	if a.Log.Error == nil {
-		log.New(os.Stderr, "ERROR: ", defaultLogFormat)
-	}
+
 	log.Fatal(http.ListenAndServe(addr, a.Router))
 }
 
 func (a *App) registerRoutes() {
 	a.Router = mux.NewRouter().StrictSlash(true)
-	a.Router.HandleFunc("/", a.getHome).Methods("GET")
 	a.Router.HandleFunc("/token/{appID}/{memo}", a.pullToken).Methods("GET")
 }
 
 // RespondWithJSON uses a struct, for a JSON response.
 func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
-	response, _ := json.Marshal(payload)
+	response, _ := jsoniter.Marshal(payload)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
@@ -67,11 +64,16 @@ func respondWithError(w http.ResponseWriter, code int, message string) {
 	respondWithJSON(w, code, map[string]string{"error": message})
 }
 
-func (a *App) getHome(w http.ResponseWriter, r *http.Request) {
-
-}
-
 func (a *App) pullToken(w http.ResponseWriter, r *http.Request) {
+	if a.authToken != "" {
+		authHeader := r.Header.Get(headerAuthorization)
+		if authHeader != fmt.Sprintf("Bearer %s", a.authToken) {
+			log.Debugf("Invalid auth token provided: %s", authHeader)
+			respondWithError(w, http.StatusForbidden, "Invalid authorization header")
+			return
+		}
+	}
+
 	vars := mux.Vars(r)
 	if _, ok := vars["appID"]; !ok {
 		respondWithError(w, http.StatusBadRequest, "Missing appID")
@@ -88,7 +90,7 @@ func (a *App) pullToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accounts, err := steam.GetAccountList()
+	accounts, err := a.steam.GetAccountList()
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Unable to list existing tokens: %s", err))
 		return
@@ -105,7 +107,7 @@ func (a *App) pullToken(w http.ResponseWriter, r *http.Request) {
 
 	// Create new if not found
 	if account.SteamID == "" {
-		account, err = steam.CreateAccount(appID, vars["memo"])
+		account, err = a.steam.CreateAccount(appID, vars["memo"])
 	}
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, err.Error())
@@ -114,7 +116,7 @@ func (a *App) pullToken(w http.ResponseWriter, r *http.Request) {
 
 	// Refresh token if found and expired
 	if account.IsExpired == true {
-		account, err = steam.ResetLoginToken(account.SteamID)
+		account, err = a.steam.ResetLoginToken(account.SteamID)
 	}
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, err.Error())

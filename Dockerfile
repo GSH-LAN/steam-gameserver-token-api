@@ -1,18 +1,31 @@
-FROM golang:1.17.1-alpine AS builder
-RUN mkdir -p /go/src/github.com/npflan/steam-gameserver-token-api
-WORKDIR /go/src/github.com/npflan/steam-gameserver-token-api
-COPY . .
-RUN go get -d . && \
-    CGO_ENABLED=0 GOOS=linux go build -a -o steam-gameserver-token-api .
+####### BUILD ENVIRONMENT #######
+FROM golang:1.17.2-alpine as builder
 
+# RUN apk add --no-cache --virtual .build-deps \
+# 	alpine-sdk \
+# 	cmake
+
+WORKDIR /build
+
+COPY go.mod go.sum ./
+
+RUN go mod download
+
+COPY ./src ./src
+
+RUN CGO_ENABLED=0 GO111MODULE=on GOOS=linux GOARCH=amd64 go build -o app ./src
+
+####### PROD IMAGE #######
 FROM alpine:3.14
 RUN addgroup -g 1000 -S go && \
     adduser -u 1000 -S web -G go && \
     apk add --no-cache ca-certificates tzdata
-WORKDIR /home/web
-COPY --from=builder /go/src/github.com/npflan/steam-gameserver-token-api/steam-gameserver-token-api /home/web
-EXPOSE 8000
+
+# Copy the Pre-built binary file from the previous stage
+COPY --from=builder /build/app ./app
 
 USER web
 
-CMD ["./steam-gameserver-token-api"]
+EXPOSE 8080
+
+CMD ["./app"]

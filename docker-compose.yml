@@ -1,0 +1,12 @@
+version: "2.1"
+services:
+  steam-gameserver-token-api:
+    image: ghcr.io/gsh-lan/steam-gameserver-token-api:latest
+    container_name: steam-gameserver-token-api
+    environment:
+      - STEAM_WEB_API_BIND_ADDRESS=:8080
+      - STEAM_WEB_API_KEY=
+      - AUTH_TOKEN= #optional
+    ports:
+      - 8080:8080
+    restart: unless-stopped
