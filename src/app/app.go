@@ -60,7 +60,7 @@ func respondWithText(w http.ResponseWriter, code int, payload string) {
 
 // RespondWithError standardizes error messages, through the use of RespondWithJSON.
 func respondWithError(w http.ResponseWriter, code int, message string) {
-	fmt.Println(message)
+	log.Info(message)
 	respondWithJSON(w, code, map[string]string{"error": message})
 }
 
@@ -68,7 +68,7 @@ func (a *App) pullToken(w http.ResponseWriter, r *http.Request) {
 	if a.authToken != "" {
 		authHeader := r.Header.Get(headerAuthorization)
 		if authHeader != fmt.Sprintf("Bearer %s", a.authToken) {
-			log.Debugf("Invalid auth token provided: %s", authHeader)
+			log.Infof("Invalid auth token provided: %s", authHeader)
 			respondWithError(w, http.StatusForbidden, "Invalid authorization header")
 			return
 		}
@@ -122,5 +122,6 @@ func (a *App) pullToken(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusInternalServerError, err.Error())
 	}
 
+	log.Infof("Successfully fetched logintoken for appid %d with memo %s", appID, vars["memo"])
 	respondWithText(w, http.StatusOK, account.LoginToken)
 }

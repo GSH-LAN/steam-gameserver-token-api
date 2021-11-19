@@ -13,7 +13,7 @@ func init() {
 	var config = zap.NewProductionConfig()
 	config.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
 	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	config.EncoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
 	l, err := config.Build()
 	if err != nil {
 		fmt.Printf("Error happened initializing logger: %+v", err)
