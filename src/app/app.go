@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"sync"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/gsh-lan/steam-gameserver-token-api/src/logger"
@@ -25,14 +27,20 @@ type App struct {
 	Router    *mux.Router
 	authToken string
 	steam     *steam.Steam
+	cache     map[string]string
+	cacheLock sync.RWMutex
 }
 
 // Run server on specific interface
-func (a *App) Run(addr, apiKey, authToken string) {
+func (a *App) Run(addr, apiKey, authToken string, backgroundProcessingInterval time.Duration) {
+	a.cache = make(map[string]string)
 	a.authToken = authToken
 	a.steam = steam.New(apiKey)
+	a.cacheLock = sync.RWMutex{}
 
 	a.registerRoutes()
+
+	go a.backgroundProcessor(backgroundProcessingInterval)
 
 	log.Fatal(http.ListenAndServe(addr, a.Router))
 }
@@ -90,6 +98,16 @@ func (a *App) pullToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// check if token is cached
+	a.cacheLock.RLock()
+	cachedToken, ok := a.cache[buildCacheKey(appID, vars["memo"])]
+	a.cacheLock.RUnlock()
+	if ok {
+		log.Infof("Successfully fetched cached logintoken for appid %d with memo %s", appID, vars["memo"])
+		respondWithText(w, http.StatusOK, cachedToken)
+		return
+	}
+
 	accounts, err := a.steam.GetAccountList()
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Unable to list existing tokens: %s", err))
@@ -122,6 +140,48 @@ func (a *App) pullToken(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusInternalServerError, err.Error())
 	}
 
+	a.cacheToken(appID, vars["memo"], account.LoginToken)
+
 	log.Infof("Successfully fetched logintoken for appid %d with memo %s", appID, vars["memo"])
 	respondWithText(w, http.StatusOK, account.LoginToken)
+}
+
+func (a *App) backgroundProcessor(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	for {
+		select {
+		case <-ticker.C:
+			func() {
+				accounts, err := a.steam.GetAccountList()
+				if err != nil {
+					log.Error(err)
+					return
+				}
+
+				for _, acct := range accounts {
+					if acct.IsExpired {
+						_, err := a.steam.ResetLoginToken(acct.SteamID)
+						if err != nil {
+							log.Error(err)
+						} else {
+							a.cacheToken(int(acct.AppID), acct.Memo, acct.LoginToken)
+						}
+					} else {
+						a.cacheToken(int(acct.AppID), acct.Memo, acct.LoginToken)
+					}
+				}
+			}()
+		}
+	}
+}
+
+// cacheToken caches a new Token for a specific appID and memo
+func (a *App) cacheToken(appID int, memo, token string) {
+	a.cacheLock.Lock()
+	defer a.cacheLock.Unlock()
+	a.cache[buildCacheKey(appID, memo)] = token
+}
+
+func buildCacheKey(appID int, memo string) string {
+	return fmt.Sprintf("%d-%s", appID, memo)
 }

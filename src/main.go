@@ -26,5 +26,5 @@ func main() {
 
 	a := app.App{}
 
-	a.Run(e.SteamWebAPIBindAddress, e.SteamWebAPIKey, e.AuthToken)
+	a.Run(e.SteamWebAPIBindAddress, e.SteamWebAPIKey, e.AuthToken, e.BackgroundProcessingInterval)
 }

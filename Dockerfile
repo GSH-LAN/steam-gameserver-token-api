@@ -1,5 +1,4 @@
-####### BUILD ENVIRONMENT #######
-FROM golang:1.17.2-alpine as builder
+FROM golang:1.21.7-alpine as builder
 
 RUN apk --no-cache add ca-certificates
 
@@ -13,7 +12,6 @@ COPY ./src ./src
 
 RUN CGO_ENABLED=0 GO111MODULE=on GOOS=linux GOARCH=amd64 go build -o app ./src
 
-####### PROD IMAGE #######
 FROM scratch
 
 # copy the ca-certificate.crt from the build stage
