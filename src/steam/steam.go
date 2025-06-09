@@ -1,27 +1,20 @@
 package steam
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
-
-	"github.com/gsh-lan/steam-gameserver-token-api/src/logger"
-	jsoniter "github.com/json-iterator/go"
-	"go.uber.org/zap"
 )
 
 // baseURL/interface/method/version?parameters
 const location = "https://api.steampowered.com/IGameServersService/"
 const version = "v1"
-
-var log *zap.SugaredLogger
-
-func init() {
-	log = logger.GetSugaredLogger()
-}
 
 // Steam base type
 type Steam struct {
@@ -41,7 +34,7 @@ func New(apiKey string) *Steam {
 
 // Steam returns a JSON { response: } object, which wraps all return values.
 type steamResponse struct {
-	Response jsoniter.RawMessage `json:"response"`
+	Response json.RawMessage `json:"response"`
 }
 
 // FML
@@ -63,7 +56,7 @@ type Account struct {
 // Remove the { response: data } wrapper, and return inner json as byte array.
 func unwrapResponse(response *[]byte) error {
 	resp := steamResponse{}
-	if err := jsoniter.Unmarshal(*response, &resp); err != nil {
+	if err := json.Unmarshal(*response, &resp); err != nil {
 		return err
 	}
 	*response = ([]byte)(resp.Response)
@@ -128,7 +121,7 @@ func (s *Steam) CreateAccount(appID int, memo string) (account Account, err erro
 	}
 
 	// Decode response
-	if err := jsoniter.Unmarshal(data, &account); err != nil {
+	if err := json.Unmarshal(data, &account); err != nil {
 		return account, err
 	}
 
@@ -144,7 +137,7 @@ func (s *Steam) GetAccountList() (accounts []Account, err error) {
 
 	var list serversResponse
 
-	if err := jsoniter.Unmarshal(data, &list); err != nil {
+	if err := json.Unmarshal(data, &list); err != nil {
 		return accounts, err
 	}
 
@@ -176,7 +169,7 @@ func (s *Steam) DeleteAllAccounts() (err error) {
 	for _, account := range accounts {
 		err = s.DeleteAccount(account.SteamID)
 		if err != nil {
-			log.Error(err)
+			slog.Error("Error deleting account", "error", err)
 		}
 	}
 
@@ -193,7 +186,7 @@ func (s *Steam) ResetLoginToken(steamID string) (account Account, err error) {
 		return account, err
 	}
 
-	if err := jsoniter.Unmarshal(data, &account); err != nil {
+	if err := json.Unmarshal(data, &account); err != nil {
 		return account, err
 	}
 

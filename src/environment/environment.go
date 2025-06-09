@@ -1,17 +1,11 @@
 package environment
 
 import (
-	"github.com/caarlos0/env/v10"
-	"github.com/gsh-lan/steam-gameserver-token-api/src/logger"
-	"go.uber.org/zap"
+	"github.com/caarlos0/env/v11"
+	"log"
+	"log/slog"
 	"time"
 )
-
-var log *zap.SugaredLogger
-
-func init() {
-	log = logger.GetSugaredLogger()
-}
 
 type Environment struct {
 	SteamWebAPIBindAddress       string        `env:"STEAM_WEB_API_BIND_ADDRESS" envDefault:":8080"`
@@ -26,6 +20,6 @@ func Load() *Environment {
 		log.Panicf("%+v\n", err)
 	}
 
-	log.Infof("Initialized Environment: %+v", e)
+	slog.Info("Initialized Environment", "environment", e)
 	return &e
 }

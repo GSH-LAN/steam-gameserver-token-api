@@ -1,26 +1,20 @@
 package app
 
 import (
+	"encoding/json"
 	"fmt"
+	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/gsh-lan/steam-gameserver-token-api/src/logger"
 	"github.com/gsh-lan/steam-gameserver-token-api/src/steam"
-	jsoniter "github.com/json-iterator/go"
-	"go.uber.org/zap"
 )
 
 const headerAuthorization = "authorization"
-
-var log *zap.SugaredLogger
-
-func init() {
-	log = logger.GetSugaredLogger()
-}
 
 // App contains references to global necessities
 type App struct {
@@ -52,7 +46,7 @@ func (a *App) registerRoutes() {
 
 // RespondWithJSON uses a struct, for a JSON response.
 func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
-	response, _ := jsoniter.Marshal(payload)
+	response, _ := json.Marshal(payload)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
@@ -68,7 +62,7 @@ func respondWithText(w http.ResponseWriter, code int, payload string) {
 
 // RespondWithError standardizes error messages, through the use of RespondWithJSON.
 func respondWithError(w http.ResponseWriter, code int, message string) {
-	log.Info(message)
+	slog.Info(message)
 	respondWithJSON(w, code, map[string]string{"error": message})
 }
 
@@ -76,7 +70,7 @@ func (a *App) pullToken(w http.ResponseWriter, r *http.Request) {
 	if a.authToken != "" {
 		authHeader := r.Header.Get(headerAuthorization)
 		if authHeader != fmt.Sprintf("Bearer %s", a.authToken) {
-			log.Infof("Invalid auth token provided: %s", authHeader)
+			slog.Info("Invalid auth token provided", "authHeader", authHeader)
 			respondWithError(w, http.StatusForbidden, "Invalid authorization header")
 			return
 		}
@@ -103,7 +97,7 @@ func (a *App) pullToken(w http.ResponseWriter, r *http.Request) {
 	cachedToken, ok := a.cache[buildCacheKey(appID, vars["memo"])]
 	a.cacheLock.RUnlock()
 	if ok {
-		log.Infof("Successfully fetched cached logintoken for appid %d with memo %s", appID, vars["memo"])
+		slog.Info("Successfully fetched cached logintoken for appid with memo", "aooid", appID, "memo", vars["memo"])
 		respondWithText(w, http.StatusOK, cachedToken)
 		return
 	}
@@ -142,7 +136,7 @@ func (a *App) pullToken(w http.ResponseWriter, r *http.Request) {
 
 	a.cacheToken(appID, vars["memo"], account.LoginToken)
 
-	log.Infof("Successfully fetched logintoken for appid %d with memo %s", appID, vars["memo"])
+	slog.Info("Successfully fetched cached logintoken for appid with memo", "aooid", appID, "memo", vars["memo"])
 	respondWithText(w, http.StatusOK, account.LoginToken)
 }
 
@@ -154,7 +148,7 @@ func (a *App) backgroundProcessor(interval time.Duration) {
 			func() {
 				accounts, err := a.steam.GetAccountList()
 				if err != nil {
-					log.Error(err)
+					slog.Error("error getting AccountList", "error", err)
 					return
 				}
 
@@ -162,7 +156,7 @@ func (a *App) backgroundProcessor(interval time.Duration) {
 					if acct.IsExpired {
 						_, err := a.steam.ResetLoginToken(acct.SteamID)
 						if err != nil {
-							log.Error(err)
+							slog.Error("Error resetting token", "error", err)
 						} else {
 							a.cacheToken(int(acct.AppID), acct.Memo, acct.LoginToken)
 						}
