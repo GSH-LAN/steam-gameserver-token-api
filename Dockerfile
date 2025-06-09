@@ -1,17 +1,12 @@
 FROM golang:1.24.4-alpine AS builder
 
 RUN apk --no-cache add ca-certificates
-
+ADD . /build
 WORKDIR /build
-
-COPY go.mod go.sum ./
-
+ARG TARGETOS
+ARG TARGETARCH
 RUN go mod download
-
-COPY ./src ./src
-
-RUN CGO_ENABLED=0 GO111MODULE=on GOOS=linux GOARCH=amd64 go build -o app ./src
-
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -ldflags="-s -w" -o app ./cmd/unwindia_pterodactyl
 FROM scratch
 
 # copy the ca-certificate.crt from the build stage
