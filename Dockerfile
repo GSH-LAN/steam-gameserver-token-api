@@ -6,7 +6,7 @@ WORKDIR /build
 ARG TARGETOS
 ARG TARGETARCH
 RUN go mod download
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -ldflags="-s -w" -o app ./cmd/unwindia_pterodactyl
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -ldflags="-s -w" -o app ./src/main.go
 FROM scratch
 
 # copy the ca-certificate.crt from the build stage
